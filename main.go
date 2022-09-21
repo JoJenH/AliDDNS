@@ -1,30 +1,36 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
-	alidns "github.com/alibabacloud-go/alidns-20150109/v2/client"
-	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
-	"github.com/alibabacloud-go/tea/tea"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
+
+	alidns "github.com/alibabacloud-go/alidns-20150109/v2/client"
+	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
-var (
-	UrlForGetIp = "http://www.3322.org/dyndns/getip"
-	ID          = ""
-	SECRET      = ""
-	DOMAIN      = ""
-	SubDomain   = ""
-)
+type Configs struct {
+	UrlForGetIp string `json:"UrlForGetIp"`
+	ID          string `json:"ID"`
+	SECRET      string `json:"SECRET"`
+	DOMAIN      string `json:"DOMAIN"`
+	SubDomain   string `json:"SubDomain"`
+}
 
-func main() {
-	file, err := os.OpenFile("ddns.log", os.O_CREATE|os.O_APPEND, 0644)
+var Config Configs
+
+func init() {
+	data, err := ioutil.ReadFile("./config.json")
 	if err != nil {
 		panic(err)
 	}
-	log.SetOutput(file)
+	json.Unmarshal(data, &Config)
+}
+
+func main() {
 
 	client, err := createClient()
 	if err != nil {
@@ -50,7 +56,7 @@ func main() {
 }
 
 func getIP() (string, error) {
-	response, err := http.Get(UrlForGetIp)
+	response, err := http.Get(Config.UrlForGetIp)
 	if err != nil {
 		return "", err
 	}
@@ -63,8 +69,8 @@ func getIP() (string, error) {
 
 func createClient() (*alidns.Client, error) {
 	config := &openapi.Config{
-		AccessKeyId:     tea.String(ID),
-		AccessKeySecret: tea.String(SECRET),
+		AccessKeyId:     tea.String(Config.ID),
+		AccessKeySecret: tea.String(Config.SECRET),
 	}
 	client, err := alidns.NewClient(config)
 	if err != nil {
@@ -77,7 +83,7 @@ func createClient() (*alidns.Client, error) {
 func update(client *alidns.Client, ip string, id string) (*alidns.UpdateDomainRecordResponse, error) {
 	request := &alidns.UpdateDomainRecordRequest{
 		RecordId: tea.String(id),
-		RR:       tea.String(SubDomain),
+		RR:       tea.String(Config.SubDomain),
 		Type:     tea.String("A"),
 		TTL:      tea.Int64(600),
 		Value:    tea.String(ip),
@@ -90,14 +96,14 @@ func update(client *alidns.Client, ip string, id string) (*alidns.UpdateDomainRe
 }
 
 func query(client *alidns.Client) (string, error) {
-	request := &alidns.DescribeDomainRecordsRequest{DomainName: tea.String(DOMAIN)}
+	request := &alidns.DescribeDomainRecordsRequest{DomainName: tea.String(Config.DOMAIN)}
 	response, err := client.DescribeDomainRecords(request)
 	if err != nil {
 		return "", err
 	}
 	data := response.Body.DomainRecords.Record
 	for _, iterm := range data {
-		if *iterm.RR == SubDomain {
+		if *iterm.RR == Config.SubDomain {
 			return *iterm.RecordId, nil
 		}
 	}
